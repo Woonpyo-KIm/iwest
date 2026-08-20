@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import streamlit.components.v1 as components
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="스마트 안전작업 허가 시스템", page_icon="🛡️", layout="wide")
 
-# --- 1. 가상 데이터베이스 (추후 사내 ERP/DB와 연동될 부분) ---
-# 작업 유형별 JSA 디폴트 데이터 (image_7.png, image_8.png 참고)
+# --- 1. 가상 데이터베이스 ---
 JSA_DB = {
     "5호기 EP Manual Valve 점검 및 정비": [
         {"작업단계": "작업 전 안전 교육", "위험요인": "없음", "위험성수준": "하", "감소대책": "작업전 안전교육 및 스트레칭 시행, 안전보호구 착용 철저"},
@@ -21,11 +21,10 @@ JSA_DB = {
     ]
 }
 
-# --- 2. 세션 상태 초기화 (데이터 임시 저장소) ---
 if 'submitted_permit' not in st.session_state:
     st.session_state['submitted_permit'] = None
 
-# --- 3. 화면 분리 (탭 생성) ---
+# --- 3. 화면 분리 ---
 st.title("🛡️ 한국서부발전 스마트 안전작업 허가 시스템")
 tab1, tab2 = st.tabs(["📱 현장 작업자 입력 (모바일 뷰)", "💻 감독자 확인 및 결재 (대시보드 뷰)"])
 
@@ -34,21 +33,15 @@ tab1, tab2 = st.tabs(["📱 현장 작업자 입력 (모바일 뷰)", "💻 감�
 # =====================================================================
 with tab1:
     st.markdown("### 👷 현장 작업자 입력 폼")
-    st.info("💡 모바일 기기에서 현장 작업자가 데이터를 입력하고 전송하는 화면입니다.")
     
     with st.form("mobile_input_form"):
-        # 1. 기본 정보
         st.subheader("1. 작업 기본 정보")
-        work_name = st.selectbox("작업명 (사내 작업 오더 선택)", options=["선택하세요", "5호기 EP Manual Valve 점검 및 정비", "일반 용접 작업 (예시)"])
+        work_name = st.selectbox("작업명", options=["선택하세요", "5호기 EP Manual Valve 점검 및 정비", "일반 용접 작업 (예시)"])
         location = st.text_input("작업 장소", placeholder="예: 5호기 EP Area")
         workers = st.text_input("작업자 명단", placeholder="쉼표로 구분 (예: 홍길동, 김철수)")
         
         st.divider()
-        
-        # 2. 필수 측정 항목 (image_6.png 참고 - 수동 입력)
         st.subheader("2. 필수 환경 측정 (현재 수치 입력)")
-        st.caption("현장에서 측정한 정확한 수치를 입력해 주세요.")
-        
         col1, col2, col3 = st.columns(3)
         with col1:
             o2_val = st.number_input("O2 (%) [정상: 18~23.5]", value=0.0, step=0.1)
@@ -60,28 +53,20 @@ with tab1:
             co2_val = st.number_input("CO2 (%) [정상: 1.5미만]", value=0.0, step=0.1)
             
         st.divider()
-        
-        # 3. 위험성 평가표 (JSA) - 자동 불러오기 및 수정
         st.subheader("3. 작업 위험성평가표 (JSA)")
-        st.caption("선택한 작업에 대한 표준 위험성평가표가 자동으로 불러와집니다. 현장 상황에 맞게 수정하세요.")
         
-        # 선택한 작업명에 따라 초기 데이터프레임 설정
         if work_name in JSA_DB:
             df_jsa = pd.DataFrame(JSA_DB[work_name])
         else:
             df_jsa = pd.DataFrame([{"작업단계": "", "위험요인": "", "위험성수준": "", "감소대책": ""}])
             
-        # 데이터 에디터 (사용자가 표 형태로 직접 수정 가능)
         edited_jsa = st.data_editor(df_jsa, num_rows="dynamic", use_container_width=True)
-        
-        # 4. 제출 버튼
         submit_btn = st.form_submit_button("감독자에게 허가서 전송하기 🚀")
         
         if submit_btn:
             if work_name == "선택하세요":
                 st.error("작업명을 선택해 주세요.")
             else:
-                # 제출된 데이터를 세션에 저장 (DB 저장 시뮬레이션)
                 st.session_state['submitted_permit'] = {
                     "work_name": work_name,
                     "location": location,
@@ -90,61 +75,97 @@ with tab1:
                     "gas_data": {"O2": o2_val, "LEL": lel_val, "CO": co_val, "H2S": h2s_val, "CO2": co2_val},
                     "jsa_data": edited_jsa
                 }
-                st.success("✅ 허가서가 성공적으로 전송되었습니다! 감독자 확인 탭을 눌러보세요.")
+                st.success("✅ 허가서가 전송되었습니다!")
 
 # =====================================================================
 # TAB 2: 감독자 확인 및 결재 (대시보드 뷰)
 # =====================================================================
 with tab2:
-    st.markdown("### 👨‍💼 관리 감독자 대시보드")
-    st.info("💡 현장에서 올라온 허가서 데이터를 PC 뷰에서 종합적으로 검토하고 결재하는 화면입니다.")
-    
     data = st.session_state['submitted_permit']
     
     if data is None:
         st.warning("아직 현장에서 제출된 작업 허가서가 없습니다.")
     else:
-        # 상단 요약 정보
-        st.subheader(f"📄 결재 대기중: {data['work_name']}")
-        col_info1, col_info2, col_info3 = st.columns(3)
-        col_info1.metric("작업 장소", data['location'])
-        col_info2.metric("작업자", data['workers'])
-        col_info3.metric("신청 시간", data['time'])
-        
-        st.divider()
-        
-        # 측정 결과 검증 로직 (image_6.png 기준 안전 범위 체크)
-        st.markdown("#### 🔍 환경 측정 결과 검토")
-        gas = data['gas_data']
-        
-        # 안전 여부 판단 로직
-        is_o2_safe = 18.0 <= gas['O2'] <= 23.5
-        is_lel_safe = gas['LEL'] < 10.0
-        is_co_safe = gas['CO'] < 30
-        is_h2s_safe = gas['H2S'] < 10
-        is_co2_safe = gas['CO2'] < 1.5
-        
-        col_gas1, col_gas2, col_gas3, col_gas4, col_gas5 = st.columns(5)
-        col_gas1.metric("O2 (%)", gas['O2'], "정상" if is_o2_safe else "위험", delta_color="normal" if is_o2_safe else "inverse")
-        col_gas2.metric("LEL (%)", gas['LEL'], "정상" if is_lel_safe else "위험", delta_color="normal" if is_lel_safe else "inverse")
-        col_gas3.metric("CO (ppm)", gas['CO'], "정상" if is_co_safe else "위험", delta_color="normal" if is_co_safe else "inverse")
-        col_gas4.metric("H2S (ppm)", gas['H2S'], "정상" if is_h2s_safe else "위험", delta_color="normal" if is_h2s_safe else "inverse")
-        col_gas5.metric("CO2 (%)", gas['CO2'], "정상" if is_co2_safe else "위험", delta_color="normal" if is_co2_safe else "inverse")
-        
-        st.divider()
-        
-        # JSA 결과 리뷰
-        st.markdown("#### 📋 작업 위험성평가표 (JSA) 최종 확인")
-        st.dataframe(data['jsa_data'], use_container_width=True)
-        
-        st.divider()
-        
-        # 결재 버튼 영역
-        st.markdown("#### ✍️ 감독자 결재")
-        col_btn1, col_btn2 = st.columns([1, 1])
+        # 상단 제어 패널
+        col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
         with col_btn1:
             if st.button("✅ 승인 및 허가서 발급", use_container_width=True, type="primary"):
-                st.success("작업이 최종 승인되었습니다. 현장으로 승인 알림이 발송됩니다.")
+                st.success("승인 완료! 아래 허가서를 출력하여 현장에 비치하세요.")
         with col_btn2:
-            if st.button("❌ 반려 (보완 지시)", use_container_width=True):
-                st.error("반려 처리되었습니다. 현장 작업자에게 재측정 및 JSA 보완을 요청합니다.")
+            if st.button("❌ 반려", use_container_width=True):
+                st.error("반려 처리되었습니다.")
+        with col_btn3:
+            components.html(
+                """
+                <button onclick="window.print()" 
+                style="width: 100%; height: 40px; background-color: #f0f2f6; border: 1px solid #c4c4c4; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                🖨️ 현장 비치용 출력
+                </button>
+                """,
+                height=50
+            )
+
+        st.divider()
+
+        # ==========================================
+        # 현장 비치용 출력 뷰 (Printable Area)
+        # ==========================================
+        with st.container(border=True):
+            # [1페이지] 본문 내용
+            st.markdown(f"<h2 style='text-align: center;'>안전작업 허가서 (현장 비치용)</h2>", unsafe_allow_html=True)
+            st.markdown(f"<p style='text-align: right;'>발급일시: {data['time']}</p>", unsafe_allow_html=True)
+            
+            st.markdown("#### 1. 작업 개요")
+            st.write(f"**작업명:** {data['work_name']}")
+            st.write(f"**작업 장소:** {data['location']}")
+            st.write(f"**투입 작업자:** {data['workers']}")
+            
+            st.markdown("#### 2. 필수 안전수칙 (TBM 전파사항)")
+            st.info("""
+            **[작업 전 반드시 작업자에게 알릴 사항]**
+            * 현장 내 모든 작업자는 해당 작업의 **위험성평가(JSA) 내용**을 숙지할 것.
+            * 보호구(안전모, 안전화, 보안경 등)는 임의로 탈착 금지.
+            """)
+            st.markdown("**🛡️ 핵심안전수칙 (WP Safety-10 Golden Rules)**\n1. 작업 전 안전점검회의(TBM) 참여 | 2. 안전보호구 착용 | 3. 밀폐공간 산소농도 측정 | 4. 고소작업 시 안전고리 체결 | 5. 화기작업 전 주변 가연물 제거 | 6. 가동설비 임의 조작 금지 | 7. 정비작업 시 LOTO(잠금장치) 실시 | 8. 지정된 통행로 이용 | 9. 불안전 상태 발견 시 즉시 작업 중지(Stop Work) | 10. 작업 전후 정리정돈")
+
+            st.markdown("#### 3. 환경 측정 기록")
+            gas = data['gas_data']
+            col_gas1, col_gas2, col_gas3, col_gas4, col_gas5 = st.columns(5)
+            col_gas1.write(f"**O2:** {gas['O2']}%")
+            col_gas2.write(f"**LEL:** {gas['LEL']}%")
+            col_gas3.write(f"**CO:** {gas['CO']}ppm")
+            col_gas4.write(f"**H2S:** {gas['H2S']}ppm")
+            col_gas5.write(f"**CO2:** {gas['CO2']}%")
+
+            st.markdown("#### 4. 작업 위험성평가(JSA) 및 안전대책")
+            st.table(data['jsa_data'])
+
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            col_sign1, col_sign2, col_sign3 = st.columns(3)
+            with col_sign1:
+                st.write("작업책임자 (수급인) : ____________ (서명)")
+            with col_sign2:
+                st.write("공사감독원 : ____________ (서명)")
+            with col_sign3:
+                st.write("발전기승원(운전원) : ____________ (서명)")
+
+            # [2페이지] 인쇄 시 뒷장으로 넘어가도록 CSS 적용된 허가서 기재요령
+            st.markdown("""
+            <div style="page-break-before: always; margin-top: 50px;">
+                <h4>[허가서 기재요령]</h4>
+                <div style="font-size: 12px; color: #555; line-height: 1.6;">
+                    1. ①란은 발급검토자인 감독부서 공사감독원이 오더설계시 선택하여 신청자가 허가서를 신청하도록 사전에 작성한다.<br>
+                    2. ②허가서 신청자인 공사업체(작업자)는 허가서에 일일작업시간(1일 8시간), 세부 작업내용을 입력하고 하단의 안전조치 요구사항을 지정(√) 한다. 수급업체 관리감독자는 허가서 결재 전 수정사항 및 검토의견을 기록할 수 있으며, 작업자는 해당사항을 TBM 시 전달 및 교육하여야 한다.<br>
+                    3. 발급검토자인 감독부서 공사감독원은 허가서의 각 항목을 최종 확인 후 작업종류별 허가승인부서 결재단계 구분에 따라 안전검토 및 허가승인을 요청한다.<br>
+                    4. ④란은 공사업체에서 안전이 확보되었을 경우 서명(안전관리자, 안전담당자 또는 안전패트롤)한다.<br>
+                    5. ⑤란은 공사업체에서 안전이 확보되었을 경우 서명 날인(수급업체 관리감독자) 한다.<br>
+                    6. ⑥란은 감독부서(관리감독원, 관리감독자 등) 및 운전부서가 작업 전 안전조치 확인 등 안전이 확보되었을 경우 서명한다.<br>
+                    7. ⑦란은 작업종료시간 기록 후 관련자가 서명 날인하고 작업허가서 원본을 허가승인부서에 제출한다.<br>
+                    8. ⑧란은 연속작업 2일차부터 생성되는 출력물로 안전조치 요구사항에 체크 및 이상이 없을 경우 수급인 관리감독자, 도급인 감독원, 발전부서에서 서명하고 실제 작업시간을 수기기록 하도록 한다.<br>
+                    9. ⑨란은 주관부서 관리감독자, 공사업체 안전관리자 관리감독자, 한국산업안전공단이 정하는 '산소 및 유해가스 농도의 측정·평가에 관한 교육'을 이수한 자가 연장 측정 기록 후 해당란에 서명한다.<br>
+                    10. ⑩란의 작업안전분석(JSA)은 공사업체(수급인)와 감독부서(도급인)가 합동으로 시행하여야 한다.<br>
+                    11. 연장작업은 4시간 이내로 허가승인부서의 수기승인을 받고 시행 할 수 있으며, 연장작업시에는 작업 전 안전조치 요구사항을 재확인하여야 한다.<br>
+                    12. 사업장 소속에 따라 '필수안전수칙(WP STAR-10)' 우측에 방재센터 전화번호가 자동기록된다.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)

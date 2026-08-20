@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import streamlit.components.v1 as components
+import json
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="스마트 안전작업 허가 시스템", page_icon="🛡️", layout="wide")
@@ -86,46 +87,7 @@ with tab2:
     if data is None:
         st.warning("아직 현장에서 제출된 작업 허가서가 없습니다.")
     else:
-        col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
-        with col_btn1:
-            if st.button("✅ 승인 및 허가서 발급", use_container_width=True, type="primary"):
-                st.success("승인 완료! 아래 허가서를 출력하여 현장에 비치하세요.")
-        with col_btn2:
-            if st.button("❌ 반려", use_container_width=True):
-                st.error("반려 처리되었습니다.")
-        with col_btn3:
-            components.html(
-                """
-                <button onclick="window.parent.print()" 
-                style="width: 100%; height: 40px; background-color: #1f77b4; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px;">
-                🖨️ 현장 비치용 출력 (A4)
-                </button>
-                """,
-                height=50
-            )
-
-        st.divider()
-
-        # 인쇄 시 불필요한 UI 숨김 CSS
-        st.markdown("""
-<style>
-@media print {
-    header, footer, [data-testid="stHeader"], [data-testid="stToolbar"], .stTabs, button, iframe {
-        display: none !important;
-    }
-    .main .block-container {
-        padding: 0 !important;
-        margin: 0 !important;
-        width: 100% !important;
-    }
-    body {
-        background-color: white !important;
-        color: black !important;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
-
+        # JSA 데이터 HTML 테이블 행 생성
         jsa_html_rows = ""
         for idx, row in data['jsa_data'].iterrows():
             jsa_html_rows += f"""<tr>
@@ -137,8 +99,8 @@ with tab2:
 
         gas = data['gas_data']
 
-        # 들여쓰기를 제거한 순수 HTML 구조
-        permit_html = f"""<div style="border: 2px solid #333; padding: 25px; border-radius: 5px; background-color: #fff; color: #000;">
+        # 순수 A4 문서용 HTML 구조 생성
+        permit_html = f"""<div style="border: 2px solid #333; padding: 25px; border-radius: 5px; background-color: #fff; color: #000; font-family: sans-serif;">
 <h1 style="text-align: center; margin-bottom: 5px; font-size: 24px; color: #000;">안전작업 허가서 (현장 비치용)</h1>
 <p style="text-align: right; font-size: 12px; margin-bottom: 20px;"><b>발급일시:</b> {data['time']}</p>
 
@@ -222,4 +184,45 @@ with tab2:
 </div>
 </div>"""
 
+        # 상단 제어 버튼 영역
+        col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
+        with col_btn1:
+            if st.button("✅ 승인 및 허가서 발급", use_container_width=True, type="primary"):
+                st.success("승인 완료! 아래 허가서를 출력하여 현장에 비치하세요.")
+        with col_btn2:
+            if st.button("❌ 반려", use_container_width=True):
+                st.error("반려 처리되었습니다.")
+        with col_btn3:
+            # 팝업 창을 새로 띄워서 100% 깔끔하게 인쇄하는 JS 스크립트
+            esc_html = json.dumps(permit_html)
+            components.html(
+                f"""
+                <script>
+                function printPermit() {{
+                    var content = {esc_html};
+                    var printWindow = window.open('', '_blank', 'height=900,width=800');
+                    printWindow.document.write('<html><head><title>안전작업 허가서 인쇄</title>');
+                    printWindow.document.write('<style>@page {{ size: A4; margin: 10mm; }} body {{ font-family: sans-serif; margin: 0; padding: 0; }}</style>');
+                    printWindow.document.write('</head><body>');
+                    printWindow.document.write(content);
+                    printWindow.document.write('</body></html>');
+                    printWindow.document.close();
+                    printWindow.focus();
+                    setTimeout(function() {{
+                        printWindow.print();
+                        printWindow.close();
+                    }}, 500);
+                }}
+                </script>
+                <button onclick="printPermit()" 
+                style="width: 100%; height: 40px; background-color: #1f77b4; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px;">
+                🖨️ 현장 비치용 출력 (A4)
+                </button>
+                """,
+                height=50
+            )
+
+        st.divider()
+
+        # 화면에 허가서 미리보기 표시
         st.markdown(permit_html, unsafe_allow_html=True)

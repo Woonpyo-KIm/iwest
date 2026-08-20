@@ -24,7 +24,7 @@ JSA_DB = {
 if 'submitted_permit' not in st.session_state:
     st.session_state['submitted_permit'] = None
 
-# --- 3. 화면 분리 ---
+# --- 2. 화면 분리 ---
 st.title("🛡️ 한국서부발전 스마트 안전작업 허가 시스템")
 tab1, tab2 = st.tabs(["📱 현장 작업자 입력 (모바일 뷰)", "💻 감독자 확인 및 결재 (대시보드 뷰)"])
 
@@ -86,7 +86,7 @@ with tab2:
     if data is None:
         st.warning("아직 현장에서 제출된 작업 허가서가 없습니다.")
     else:
-        # 상단 제어 패널
+        # 상단 제어 버튼
         col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
         with col_btn1:
             if st.button("✅ 승인 및 허가서 발급", use_container_width=True, type="primary"):
@@ -95,11 +95,12 @@ with tab2:
             if st.button("❌ 반려", use_container_width=True):
                 st.error("반려 처리되었습니다.")
         with col_btn3:
+            # 부모 창(전체 페이지)을 출력하도록 JavaScript 수정
             components.html(
                 """
-                <button onclick="window.print()" 
-                style="width: 100%; height: 40px; background-color: #f0f2f6; border: 1px solid #c4c4c4; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                🖨️ 현장 비치용 출력
+                <button onclick="window.parent.print()" 
+                style="width: 100%; height: 40px; background-color: #1f77b4; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 14px;">
+                🖨️ 현장 비치용 출력 (A4)
                 </button>
                 """,
                 height=50
@@ -107,53 +108,126 @@ with tab2:
 
         st.divider()
 
+        # 전체 화면 인쇄 스타일 제어 (인쇄 시 상단 버튼, 메뉴, 탭 숨김 처리)
+        st.markdown("""
+            <style>
+            @media print {
+                /* 불필요한 UI 숨기기 */
+                header, footer, [data-testid="stHeader"], [data-testid="stToolbar"], .stTabs, button, iframe {
+                    display: none !important;
+                }
+                .main .block-container {
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    width: 100% !important;
+                }
+                body {
+                    background-color: white !important;
+                    color: black !important;
+                }
+                /* 문서 테두리 인쇄 설정 */
+                .print-area {
+                    border: 2px solid #000 !important;
+                    padding: 20px !important;
+                    margin: 0 !important;
+                }
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
         # ==========================================
-        # 현장 비치용 출력 뷰 (Printable Area)
+        # 현장 비치용 인쇄 문서 영역 (HTML/CSS 기반)
         # ==========================================
-        with st.container(border=True):
-            # [1페이지] 본문 내용
-            st.markdown(f"<h2 style='text-align: center;'>안전작업 허가서 (현장 비치용)</h2>", unsafe_allow_html=True)
-            st.markdown(f"<p style='text-align: right;'>발급일시: {data['time']}</p>", unsafe_allow_html=True)
+        jsa_html_rows = ""
+        for idx, row in data['jsa_data'].iterrows():
+            jsa_html_rows += f"""
+            <tr>
+                <td style="border:1px solid #333; padding:6px; text-align:center;">{row.get('작업단계','')}</td>
+                <td style="border:1px solid #333; padding:6px; text-align:center;">{row.get('위험요인','')}</td>
+                <td style="border:1px solid #333; padding:6px; text-align:center;">{row.get('위험성수준','')}</td>
+                <td style="border:1px solid #333; padding:6px;">{row.get('감소대책','')}</td>
+            </tr>
+            """
+
+        gas = data['gas_data']
+
+        # 전체 인쇄 양식 HTML
+        permit_html = f"""
+        <div class="print-area" style="border: 2px solid #333; padding: 25px; border-radius: 5px; background-color: #fff; color: #000;">
+            <h1 style="text-align: center; margin-bottom: 5px; font-size: 24px;">안전작업 허가서 (현장 비치용)</h1>
+            <p style="text-align: right; font-size: 12px; margin-bottom: 20px;"><b>발급일시:</b> {data['time']}</p>
             
-            st.markdown("#### 1. 작업 개요")
-            st.write(f"**작업명:** {data['work_name']}")
-            st.write(f"**작업 장소:** {data['location']}")
-            st.write(f"**투입 작업자:** {data['workers']}")
-            
-            st.markdown("#### 2. 필수 안전수칙 (TBM 전파사항)")
-            st.info("""
-            **[작업 전 반드시 작업자에게 알릴 사항]**
-            * 현장 내 모든 작업자는 해당 작업의 **위험성평가(JSA) 내용**을 숙지할 것.
-            * 보호구(안전모, 안전화, 보안경 등)는 임의로 탈착 금지.
-            """)
-            st.markdown("**🛡️ 핵심안전수칙 (WP Safety-10 Golden Rules)**\n1. 작업 전 안전점검회의(TBM) 참여 | 2. 안전보호구 착용 | 3. 밀폐공간 산소농도 측정 | 4. 고소작업 시 안전고리 체결 | 5. 화기작업 전 주변 가연물 제거 | 6. 가동설비 임의 조작 금지 | 7. 정비작업 시 LOTO(잠금장치) 실시 | 8. 지정된 통행로 이용 | 9. 불안전 상태 발견 시 즉시 작업 중지(Stop Work) | 10. 작업 전후 정리정돈")
+            <h3 style="border-bottom: 2px solid #333; padding-bottom: 5px; margin-top: 15px; font-size: 16px;">1. 작업 개요</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 15px;">
+                <tr>
+                    <td style="padding: 4px 0;"><b>작업명:</b> {data['work_name']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px 0;"><b>작업 장소:</b> {data['location']}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px 0;"><b>투입 작업자:</b> {data['workers']}</td>
+                </tr>
+            </table>
 
-            st.markdown("#### 3. 환경 측정 기록")
-            gas = data['gas_data']
-            col_gas1, col_gas2, col_gas3, col_gas4, col_gas5 = st.columns(5)
-            col_gas1.write(f"**O2:** {gas['O2']}%")
-            col_gas2.write(f"**LEL:** {gas['LEL']}%")
-            col_gas3.write(f"**CO:** {gas['CO']}ppm")
-            col_gas4.write(f"**H2S:** {gas['H2S']}ppm")
-            col_gas5.write(f"**CO2:** {gas['CO2']}%")
+            <h3 style="border-bottom: 2px solid #333; padding-bottom: 5px; margin-top: 15px; font-size: 16px;">2. 필수 안전수칙 (TBM 전파사항)</h3>
+            <div style="background-color: #f8f9fa; border-left: 4px solid #1f77b4; padding: 10px; font-size: 12px; margin-bottom: 10px; color: #000;">
+                <b>[작업 전 근로자 필수 전달]</b><br>
+                • 현장 내 모든 작업자는 해당 작업의 <b>위험성평가(JSA) 내용</b>을 숙지할 것.<br>
+                • 개인 보호구(안전모, 안전화, 보안경 등) 착용 상태를 상시 유지할 것.
+            </div>
+            <p style="font-size: 11px; line-height: 1.5; margin-bottom: 15px;">
+                <b>🛡️ 핵심안전수칙 (WP Safety-10 Golden Rules):</b><br>
+                1. TBM 참여 | 2. 보호구 착용 | 3. 산소농도 측정 | 4. 안전고리 체결 | 5. 가연물 제거 | 6. 임의조작 금지 | 7. LOTO 실시 | 8. 통행로 이용 | 9. Stop Work 권한 | 10. 정리정돈
+            </p>
 
-            st.markdown("#### 4. 작업 위험성평가(JSA) 및 안전대책")
-            st.table(data['jsa_data'])
+            <h3 style="border-bottom: 2px solid #333; padding-bottom: 5px; margin-top: 15px; font-size: 16px;">3. 환경 측정 기록</h3>
+            <table style="width: 100%; border-collapse: collapse; border: 1px solid #333; font-size: 12px; text-align: center; margin-bottom: 20px;">
+                <tr style="background-color: #f2f2f2;">
+                    <th style="border: 1px solid #333; padding: 6px;">O2 (%)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">가연성가스 LEL (%)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">CO (ppm)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">H2S (ppm)</th>
+                    <th style="border: 1px solid #333; padding: 6px;">CO2 (%)</th>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #333; padding: 6px;">{gas['O2']}%</td>
+                    <td style="border: 1px solid #333; padding: 6px;">{gas['LEL']}%</td>
+                    <td style="border: 1px solid #333; padding: 6px;">{gas['CO']}ppm</td>
+                    <td style="border: 1px solid #333; padding: 6px;">{gas['H2S']}ppm</td>
+                    <td style="border: 1px solid #333; padding: 6px;">{gas['CO2']}%</td>
+                </tr>
+            </table>
 
-            st.markdown("<br><br>", unsafe_allow_html=True)
-            col_sign1, col_sign2, col_sign3 = st.columns(3)
-            with col_sign1:
-                st.write("작업책임자 (수급인) : ____________ (서명)")
-            with col_sign2:
-                st.write("공사감독원 : ____________ (서명)")
-            with col_sign3:
-                st.write("발전기승원(운전원) : ____________ (서명)")
+            <h3 style="border-bottom: 2px solid #333; padding-bottom: 5px; margin-top: 15px; font-size: 16px;">4. 작업 위험성평가(JSA) 및 안전대책</h3>
+            <table style="width: 100%; border-collapse: collapse; border: 1px solid #333; font-size: 12px; margin-bottom: 30px;">
+                <thead>
+                    <tr style="background-color: #f2f2f2;">
+                        <th style="border:1px solid #333; padding:6px; width:20%;">작업단계</th>
+                        <th style="border:1px solid #333; padding:6px; width:25%;">위험요인</th>
+                        <th style="border:1px solid #333; padding:6px; width:15%;">위험성수준</th>
+                        <th style="border:1px solid #333; padding:6px; width:40%;">감소대책</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {jsa_html_rows}
+                </tbody>
+            </table>
 
-            # [2페이지] 인쇄 시 뒷장으로 넘어가도록 CSS 적용된 허가서 기재요령
-            st.markdown("""
-            <div style="page-break-before: always; margin-top: 50px;">
-                <h4>[허가서 기재요령]</h4>
-                <div style="font-size: 12px; color: #555; line-height: 1.6;">
+            <div style="margin-top: 40px; font-size: 13px;">
+                <table style="width: 100%; text-align: center;">
+                    <tr>
+                        <td style="width: 33%;"><b>작업책임자 (수급인):</b> ________ (서명)</td>
+                        <td style="width: 33%;"><b>공사감독원:</b> ________ (서명)</td>
+                        <td style="width: 33%;"><b>발전기승원(운전원):</b> ________ (서명)</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- 뒷장 인쇄용 허가서 기재요령 -->
+            <div style="page-break-before: always; margin-top: 30px; padding-top: 20px;">
+                <h3 style="border-bottom: 2px solid #333; padding-bottom: 5px; font-size: 16px;">[허가서 기재요령]</h3>
+                <div style="font-size: 10.5px; color: #222; line-height: 1.6; text-align: justify;">
                     1. ①란은 발급검토자인 감독부서 공사감독원이 오더설계시 선택하여 신청자가 허가서를 신청하도록 사전에 작성한다.<br>
                     2. ②허가서 신청자인 공사업체(작업자)는 허가서에 일일작업시간(1일 8시간), 세부 작업내용을 입력하고 하단의 안전조치 요구사항을 지정(√) 한다. 수급업체 관리감독자는 허가서 결재 전 수정사항 및 검토의견을 기록할 수 있으며, 작업자는 해당사항을 TBM 시 전달 및 교육하여야 한다.<br>
                     3. 발급검토자인 감독부서 공사감독원은 허가서의 각 항목을 최종 확인 후 작업종류별 허가승인부서 결재단계 구분에 따라 안전검토 및 허가승인을 요청한다.<br>
@@ -168,4 +242,8 @@ with tab2:
                     12. 사업장 소속에 따라 '필수안전수칙(WP STAR-10)' 우측에 방재센터 전화번호가 자동기록된다.
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """
+        
+        # HTML 문서 화면 출력
+        st.markdown(permit_html, unsafe_allow_html=True)
